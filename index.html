@@ -363,21 +363,34 @@
                     
                     <!-- Image Upload -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Book Photo 书籍照片 <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Book Photos 书籍照片 <span class="text-red-500">*</span></label>
+                        
+                        <!-- Existing Images Preview -->
+                        <div id="existingImagesContainer" class="hidden mb-3">
+                            <div id="existingImages" class="flex flex-wrap gap-2">
+                                <!-- Existing images will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Upload Area -->
                         <div id="uploadArea" class="upload-area rounded-xl p-6 text-center cursor-pointer">
                             <div id="uploadPlaceholder">
                                 <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
                                 <p class="text-gray-500">Click or drag to upload 点击或拖拽上传</p>
-                                <p class="text-gray-400 text-sm mt-1">JPG, PNG supported</p>
-                            </div>
-                            <div id="uploadPreview" class="hidden">
-                                <img id="previewImage" class="max-h-48 mx-auto rounded-lg" alt="Preview">
-                                <p class="text-primary-600 text-sm mt-2">Click to change 点击更换</p>
+                                <p class="text-gray-400 text-sm mt-1">JPG, PNG supported (max 5 photos 最多5张)</p>
                             </div>
                         </div>
-                        <input type="file" id="imageInput" accept="image/*" class="hidden">
+                        <input type="file" id="imageInput" accept="image/*" multiple class="hidden">
+                        
+                        <!-- New Images Preview -->
+                        <div id="newImagesContainer" class="hidden mt-3">
+                            <p class="text-sm text-gray-500 mb-2">New photos to upload 待上传的新照片:</p>
+                            <div id="newImagesPreview" class="flex flex-wrap gap-2">
+                                <!-- New image previews will be populated here -->
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Book Title -->
@@ -527,7 +540,8 @@
         let isAdmin = false;
         let books = [];
         let whitelist = [];
-        let selectedImage = null;
+        let selectedImages = [];  // Array of new images to upload
+        let existingImageUrls = [];  // Array of existing image URLs when editing
         let editingBook = null;
         let searchTimeout = null;
 
@@ -572,8 +586,10 @@
         const uploadArea = document.getElementById('uploadArea');
         const imageInput = document.getElementById('imageInput');
         const uploadPlaceholder = document.getElementById('uploadPlaceholder');
-        const uploadPreview = document.getElementById('uploadPreview');
-        const previewImage = document.getElementById('previewImage');
+        const existingImagesContainer = document.getElementById('existingImagesContainer');
+        const existingImagesDiv = document.getElementById('existingImages');
+        const newImagesContainer = document.getElementById('newImagesContainer');
+        const newImagesPreview = document.getElementById('newImagesPreview');
         const bookStatus = document.getElementById('bookStatus');
         const borrowerField = document.getElementById('borrowerField');
         const deleteBookBtn = document.getElementById('deleteBookBtn');
@@ -918,16 +934,20 @@
             document.getElementById('bookBorrower').value = book?.borrower || '';
             document.getElementById('bookNotes').value = book?.notes || '';
             
-            // Handle image preview
-            selectedImage = null;
-            if (book?.imageUrl) {
-                previewImage.src = book.imageUrl;
-                uploadPlaceholder.classList.add('hidden');
-                uploadPreview.classList.remove('hidden');
-            } else {
-                uploadPlaceholder.classList.remove('hidden');
-                uploadPreview.classList.add('hidden');
+            // Reset image arrays
+            selectedImages = [];
+            existingImageUrls = [];
+            
+            // Handle existing images (for editing)
+            if (book?.imageUrls && book.imageUrls.length > 0) {
+                existingImageUrls = [...book.imageUrls];
+            } else if (book?.imageUrl) {
+                // Backward compatibility: single imageUrl
+                existingImageUrls = [book.imageUrl];
             }
+            
+            renderExistingImages();
+            renderNewImagePreviews();
             
             // Handle borrower field visibility
             borrowerField.classList.toggle('hidden', bookStatus.value !== 'borrowed');
@@ -936,38 +956,124 @@
             document.body.style.overflow = 'hidden';
         }
 
+        // Render existing images in edit mode
+        function renderExistingImages() {
+            if (existingImageUrls.length > 0) {
+                existingImagesContainer.classList.remove('hidden');
+                existingImagesDiv.innerHTML = existingImageUrls.map((url, index) => `
+                    <div class="relative group">
+                        <img src="${escapeHtml(url)}" class="w-20 h-20 object-cover rounded-lg border-2 ${index === 0 ? 'border-primary-500' : 'border-gray-200'}" onerror="this.src='${PLACEHOLDER_IMAGE}'">
+                        ${index === 0 ? '<span class="absolute -top-2 -left-2 bg-primary-500 text-white text-xs px-1.5 py-0.5 rounded">Main</span>' : ''}
+                        <button type="button" class="remove-existing-image absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" data-index="${index}">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                        ${index > 0 ? `
+                            <button type="button" class="set-main-image absolute -bottom-2 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity" data-index="${index}">
+                                Set Main
+                            </button>
+                        ` : ''}
+                    </div>
+                `).join('');
+                
+                // Attach event listeners for remove buttons
+                existingImagesDiv.querySelectorAll('.remove-existing-image').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const index = parseInt(btn.dataset.index);
+                        existingImageUrls.splice(index, 1);
+                        renderExistingImages();
+                    });
+                });
+                
+                // Attach event listeners for set main buttons
+                existingImagesDiv.querySelectorAll('.set-main-image').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const index = parseInt(btn.dataset.index);
+                        const [moved] = existingImageUrls.splice(index, 1);
+                        existingImageUrls.unshift(moved);
+                        renderExistingImages();
+                    });
+                });
+            } else {
+                existingImagesContainer.classList.add('hidden');
+            }
+        }
+
+        // Render new image previews
+        function renderNewImagePreviews() {
+            if (selectedImages.length > 0) {
+                newImagesContainer.classList.remove('hidden');
+                newImagesPreview.innerHTML = '';
+                
+                selectedImages.forEach((file, index) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const div = document.createElement('div');
+                        div.className = 'relative group';
+                        div.innerHTML = `
+                            <img src="${e.target.result}" class="w-20 h-20 object-cover rounded-lg border-2 border-green-400">
+                            <span class="absolute -top-2 -left-2 bg-green-500 text-white text-xs px-1.5 py-0.5 rounded">New</span>
+                            <button type="button" class="remove-new-image absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" data-index="${index}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        `;
+                        newImagesPreview.appendChild(div);
+                        
+                        // Attach remove handler
+                        div.querySelector('.remove-new-image').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            selectedImages.splice(index, 1);
+                            renderNewImagePreviews();
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            } else {
+                newImagesContainer.classList.add('hidden');
+            }
+        }
+
         // Close modal
         function closeBookModal() {
             bookModal.classList.add('hidden');
             document.body.style.overflow = '';
             editingBook = null;
-            selectedImage = null;
+            selectedImages = [];
+            existingImageUrls = [];
         }
 
-        // Handle image selection
-        function handleImageSelect(file) {
-            if (!file) return;
+        // Handle image selection (multiple files)
+        function handleImageSelect(files) {
+            if (!files || files.length === 0) return;
             
-            // Validate file type
-            if (!file.type.startsWith('image/')) {
-                showToast('Please select an image file 请选择图片文件', 'error');
+            const totalImages = existingImageUrls.length + selectedImages.length + files.length;
+            if (totalImages > 5) {
+                showToast('Maximum 5 photos allowed 最多5张照片', 'error');
                 return;
             }
             
-            // Validate file size (max 5MB)
-            if (file.size > 5 * 1024 * 1024) {
-                showToast('Image must be under 5MB 图片不能超过5MB', 'error');
-                return;
+            for (const file of files) {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    showToast('Please select image files only 请只选择图片文件', 'error');
+                    continue;
+                }
+                
+                // Validate file size (max 5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    showToast(`${file.name} is too large (max 5MB) 文件过大`, 'error');
+                    continue;
+                }
+                
+                selectedImages.push(file);
             }
             
-            selectedImage = file;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                previewImage.src = e.target.result;
-                uploadPlaceholder.classList.add('hidden');
-                uploadPreview.classList.remove('hidden');
-            };
-            reader.readAsDataURL(file);
+            renderNewImagePreviews();
         }
 
         // Upload image to Cloudinary
@@ -1009,8 +1115,10 @@
                 return;
             }
             
-            if (!editingBook && !selectedImage) {
-                showToast('Please upload a photo 请上传书籍照片', 'error');
+            // Check if we have at least one image
+            const totalImages = existingImageUrls.length + selectedImages.length;
+            if (totalImages === 0) {
+                showToast('Please upload at least one photo 请至少上传一张照片', 'error');
                 return;
             }
             
@@ -1019,12 +1127,15 @@
             submitBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-white border-t-transparent"></div>';
             
             try {
-                let imageUrl = editingBook?.imageUrl;
-                
-                // Upload new image if selected
-                if (selectedImage) {
-                    imageUrl = await uploadImage(selectedImage);
+                // Upload all new images
+                const newImageUrls = [];
+                for (const file of selectedImages) {
+                    const url = await uploadImage(file);
+                    newImageUrls.push(url);
                 }
+                
+                // Combine existing and new images
+                const allImageUrls = [...existingImageUrls, ...newImageUrls];
                 
                 const bookData = {
                     title,
@@ -1032,7 +1143,8 @@
                     status,
                     borrower: status === 'borrowed' ? borrower : '',
                     notes,
-                    imageUrl,
+                    imageUrl: allImageUrls[0],  // Main image (first one) for backward compatibility
+                    imageUrls: allImageUrls,     // All images array
                     ownerEmail: currentUser.email,
                     ownerName: currentUser.displayName || currentUser.email.split('@')[0],
                     updatedAt: serverTimestamp()
@@ -1127,23 +1239,54 @@
                 borrowedDays = `${days} days`;
             }
             
+            // Get all images (support both old and new format)
+            const allImages = book.imageUrls && book.imageUrls.length > 0 
+                ? book.imageUrls 
+                : (book.imageUrl ? [book.imageUrl] : []);
+            
             // Escape all user inputs to prevent XSS
             const safeTitle = escapeHtml(book.title);
             const safeOwnerName = escapeHtml(book.ownerName);
             const safeBorrower = escapeHtml(book.borrower);
             const safeNotes = escapeHtml(book.notes);
-            const safeImageUrl = escapeHtml(book.imageUrl);
             const safeLanguage = escapeHtml(book.language);
             
             detailContent.innerHTML = `
                 <div class="relative">
-                    <img src="${safeImageUrl}" alt="${safeTitle}" class="w-full max-h-96 object-contain bg-gray-100" onerror="this.src='${PLACEHOLDER_IMAGE}'">
+                    <img id="mainDetailImage" src="${escapeHtml(allImages[0] || '')}" alt="${safeTitle}" class="w-full max-h-96 object-contain bg-gray-100" onerror="this.src='${PLACEHOLDER_IMAGE}'">
                     <button id="closeDetailBtn" class="absolute top-4 right-4 bg-white/90 hover:bg-white text-gray-600 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     </button>
+                    ${allImages.length > 1 ? `
+                        <button id="prevImageBtn" class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-600 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
+                        <button id="nextImageBtn" class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-600 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
+                            <span id="imageCounter">1</span> / ${allImages.length}
+                        </div>
+                    ` : ''}
                 </div>
+                
+                ${allImages.length > 1 ? `
+                    <div class="flex gap-2 p-3 bg-gray-50 overflow-x-auto">
+                        ${allImages.map((url, index) => `
+                            <img src="${escapeHtml(url)}" 
+                                 class="detail-thumbnail w-16 h-16 object-cover rounded-lg cursor-pointer border-2 ${index === 0 ? 'border-primary-500' : 'border-transparent'} hover:border-primary-300 transition-colors flex-shrink-0" 
+                                 data-index="${index}"
+                                 onerror="this.src='${PLACEHOLDER_IMAGE}'">
+                        `).join('')}
+                    </div>
+                ` : ''}
+                
                 <div class="p-6">
                     <div class="flex items-start justify-between mb-4">
                         <div>
@@ -1189,12 +1332,52 @@
             detailModal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
             
+            // Image gallery state
+            let currentImageIndex = 0;
+            
+            // Update main image and thumbnails
+            function updateGallery(index) {
+                currentImageIndex = index;
+                const mainImage = document.getElementById('mainDetailImage');
+                mainImage.src = allImages[index];
+                
+                // Update counter
+                const counter = document.getElementById('imageCounter');
+                if (counter) counter.textContent = index + 1;
+                
+                // Update thumbnail borders
+                document.querySelectorAll('.detail-thumbnail').forEach((thumb, i) => {
+                    thumb.classList.toggle('border-primary-500', i === index);
+                    thumb.classList.toggle('border-transparent', i !== index);
+                });
+            }
+            
             // Attach event listeners
             document.getElementById('closeDetailBtn').addEventListener('click', closeDetailModal);
             document.getElementById('editFromDetailBtn')?.addEventListener('click', () => {
                 closeDetailModal();
                 openBookModal(book);
             });
+            
+            // Gallery navigation
+            if (allImages.length > 1) {
+                document.getElementById('prevImageBtn')?.addEventListener('click', () => {
+                    const newIndex = currentImageIndex > 0 ? currentImageIndex - 1 : allImages.length - 1;
+                    updateGallery(newIndex);
+                });
+                
+                document.getElementById('nextImageBtn')?.addEventListener('click', () => {
+                    const newIndex = currentImageIndex < allImages.length - 1 ? currentImageIndex + 1 : 0;
+                    updateGallery(newIndex);
+                });
+                
+                // Thumbnail click
+                document.querySelectorAll('.detail-thumbnail').forEach(thumb => {
+                    thumb.addEventListener('click', () => {
+                        updateGallery(parseInt(thumb.dataset.index));
+                    });
+                });
+            }
         }
 
         // Close detail modal
@@ -1344,7 +1527,7 @@
 
         // Image upload handlers
         uploadArea.addEventListener('click', () => imageInput.click());
-        imageInput.addEventListener('change', (e) => handleImageSelect(e.target.files[0]));
+        imageInput.addEventListener('change', (e) => handleImageSelect(e.target.files));
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -1355,7 +1538,7 @@
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
-            handleImageSelect(e.dataTransfer.files[0]);
+            handleImageSelect(e.dataTransfer.files);
         });
 
         // Status change handler
