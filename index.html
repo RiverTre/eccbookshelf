@@ -10,6 +10,8 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -248,14 +250,15 @@
         <!-- Unauthorized State -->
         <div id="unauthorizedState" class="hidden flex flex-col items-center justify-center py-20">
             <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
                 </div>
-                <h2 class="font-serif text-2xl font-semibold text-gray-800 mb-2">Access Denied 暂无访问权限</h2>
-                <p class="text-gray-500 mb-4">Your account is not authorized to access this platform.<br>您的账号尚未被授权访问此平台。</p>
-                <p class="text-gray-400 text-sm mb-6">Please contact the administrator to add your email to the whitelist.<br>请联系管理员将您的邮箱添加到白名单。</p>
+                <h2 class="font-serif text-2xl font-semibold text-gray-800 mb-2">Account Pending 账号待审核</h2>
+                <p class="text-gray-500 mb-4">Your account has been created, but is not yet authorized.<br>您的账号已创建，但尚未获得授权。</p>
+                <p class="text-gray-400 text-sm mb-6">Please contact the administrator to approve your access.<br>请联系管理员审批您的访问权限。</p>
+                <p id="userEmailDisplay" class="text-sm text-gray-500 mb-4"></p>
                 <button id="logoutBtnUnauth" class="text-primary-600 hover:text-primary-700 font-medium">
                     Switch Account 切换账号
                 </button>
@@ -712,18 +715,10 @@
                 return;
             }
             
-            // Check whitelist first
-            const isWhitelisted = await checkWhitelist(email.toLowerCase());
-            const isAdminUser = await checkAdmin(email.toLowerCase());
-            
-            if (!isWhitelisted && !isAdminUser) {
-                showLoginError('Email not in whitelist. Contact admin. 邮箱不在白名单中，请联系管理员');
-                return;
-            }
-            
             try {
                 emailLoginBtn.disabled = true;
                 emailLoginBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-white border-t-transparent"></div>';
+                // Just sign in - whitelist check happens in onAuthStateChanged
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
                 console.error('Email login error:', error);
@@ -759,20 +754,12 @@
                 return;
             }
             
-            // Check whitelist first
-            const isWhitelisted = await checkWhitelist(email.toLowerCase());
-            const isAdminUser = await checkAdmin(email.toLowerCase());
-            
-            if (!isWhitelisted && !isAdminUser) {
-                showLoginError('Email not in whitelist. Contact admin. 邮箱不在白名单中，请联系管理员');
-                return;
-            }
-            
             try {
                 emailRegisterBtn.disabled = true;
                 emailRegisterBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-warm-700 border-t-transparent"></div>';
+                // Just create account - whitelist check happens in onAuthStateChanged
                 await createUserWithEmailAndPassword(auth, email, password);
-                showToast('Registration successful! 注册成功！');
+                // Note: If not in whitelist, user will see unauthorized page and can contact admin
             } catch (error) {
                 console.error('Register error:', error);
                 let errorMsg = 'Registration failed 注册失败';
@@ -1493,6 +1480,11 @@
                     loadBooks();
                 } else {
                     showState(unauthorizedState);
+                    // Show user email on unauthorized page
+                    const emailDisplay = document.getElementById('userEmailDisplay');
+                    if (emailDisplay) {
+                        emailDisplay.textContent = `Your email 您的邮箱: ${user.email}`;
+                    }
                     updateHeaderActions();
                 }
             } else {
