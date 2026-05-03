@@ -475,6 +475,25 @@
                 </div>
                 
                 <div class="p-6">
+                    <!-- Admin Management -->
+                    <div class="mb-8">
+                        <h4 class="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            Admins 管理员
+                        </h4>
+                        <div class="flex gap-2 mb-4">
+                            <input type="email" id="newAdminInput" placeholder="Enter admin email 输入管理员邮箱" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+                            <button id="addAdminBtn" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors">
+                                Add 添加
+                            </button>
+                        </div>
+                        <div id="adminEmailsList" class="space-y-2">
+                            <!-- Admin emails will be populated here -->
+                        </div>
+                    </div>
+                    
                     <!-- Whitelist Management -->
                     <div class="mb-8">
                         <h4 class="font-medium text-gray-800 mb-4">Email Whitelist 邮箱白名单</h4>
@@ -588,6 +607,7 @@
         let isAdmin = false;
         let books = [];
         let whitelist = [];
+        let adminEmails = [];
         let selectedImages = [];  // Array of new images to upload
         let existingImageUrls = [];  // Array of existing image URLs when editing
         let editingBook = null;
@@ -726,8 +746,19 @@
         async function checkAdmin(email) {
             const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
             if (adminDoc.exists()) {
-                return adminDoc.data().email === email;
+                const data = adminDoc.data();
+                // New format: emails array
+                if (Array.isArray(data.emails)) {
+                    adminEmails = data.emails;
+                    return adminEmails.includes(email);
+                }
+                // Old format: single email string — auto-migrate on next admin write
+                if (data.email) {
+                    adminEmails = [data.email];
+                    return data.email === email;
+                }
             }
+            adminEmails = [];
             return false;
         }
 
@@ -1554,6 +1585,47 @@
         async function openAdminPanel() {
             if (!isAdmin) return;
             
+            // Load admin list (refresh from DB)
+            const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
+            if (adminDoc.exists()) {
+                const data = adminDoc.data();
+                adminEmails = Array.isArray(data.emails) ? data.emails : (data.email ? [data.email] : []);
+            }
+            
+            // Render admin list
+            const adminEmailsList = document.getElementById('adminEmailsList');
+            adminEmailsList.innerHTML = adminEmails.map((email, index) => `
+                <div class="flex items-center justify-between bg-primary-50 rounded-lg px-4 py-2">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span class="text-sm text-gray-700">${escapeHtml(email)}</span>
+                        ${email === currentUser.email ? '<span class="text-xs text-primary-500">(you 你)</span>' : ''}
+                    </div>
+                    ${adminEmails.length > 1 && email !== currentUser.email ? `
+                        <button class="remove-admin-btn text-red-500 hover:text-red-700" data-index="${index}" title="Remove admin 移除管理员">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
+            `).join('');
+            
+            // Attach admin remove handlers
+            document.querySelectorAll('.remove-admin-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const index = parseInt(btn.dataset.index);
+                    const removedEmail = adminEmails[index];
+                    if (!confirm(`Remove admin ${removedEmail}?\n确定移除管理员 ${removedEmail}？`)) return;
+                    adminEmails.splice(index, 1);
+                    await setDoc(doc(db, 'settings', 'admin'), { emails: adminEmails });
+                    showToast('Admin removed 管理员已移除');
+                    openAdminPanel(); // Refresh
+                });
+            });
+            
             // Load whitelist
             const whitelistDoc = await getDoc(doc(db, 'settings', 'whitelist'));
             whitelist = whitelistDoc.exists() ? (whitelistDoc.data().emails || []) : [];
@@ -1706,6 +1778,30 @@
             }
         }
 
+        // Add admin
+        async function handleAddAdmin() {
+            const input = document.getElementById('newAdminInput');
+            const email = input.value.trim().toLowerCase();
+            
+            if (!email) return;
+            
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showToast('Please enter a valid email 请输入有效邮箱', 'error');
+                return;
+            }
+            
+            if (adminEmails.includes(email)) {
+                showToast('Already an admin 已经是管理员', 'error');
+                return;
+            }
+            
+            adminEmails.push(email);
+            await setDoc(doc(db, 'settings', 'admin'), { emails: adminEmails });
+            input.value = '';
+            showToast('Admin added 管理员已添加');
+            openAdminPanel(); // Refresh
+        }
+
         // Auth state observer
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -1760,6 +1856,10 @@
             if (e.key === 'Enter') handleAddEmail();
         });
         document.getElementById('batchAddBtn').addEventListener('click', handleBatchAddEmails);
+        document.getElementById('addAdminBtn').addEventListener('click', handleAddAdmin);
+        document.getElementById('newAdminInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleAddAdmin();
+        });
         closeRequestBtn.addEventListener('click', closeRequestModal);
         requestBackdrop.addEventListener('click', closeRequestModal);
         submitRequestBtn.addEventListener('click', handleRequestSubmit);
