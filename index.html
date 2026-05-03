@@ -489,6 +489,17 @@
                         </div>
                     </div>
                     
+                    <!-- Batch Add Emails -->
+                    <div class="mb-8">
+                        <h4 class="font-medium text-gray-800 mb-4">Batch Add Emails 批量添加邮箱</h4>
+                        <p class="text-sm text-gray-500 mb-3">Paste multiple emails separated by commas, newlines, or semicolons<br>粘贴多个邮箱，用逗号、换行或分号分隔</p>
+                        <textarea id="batchEmailInput" rows="4" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-sm font-mono" placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com"></textarea>
+                        <button id="batchAddBtn" class="mt-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors w-full">
+                            Batch Add 批量添加
+                        </button>
+                        <p id="batchResult" class="text-sm mt-2 hidden"></p>
+                    </div>
+                    
                     <!-- Borrowing History -->
                     <div>
                         <h4 class="font-medium text-gray-800 mb-4">Borrowing History 借阅记录</h4>
@@ -496,6 +507,33 @@
                             <!-- History will be populated here -->
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Request Book Modal -->
+    <div id="requestModal" class="fixed inset-0 z-[60] hidden">
+        <div class="modal-backdrop absolute inset-0" id="requestBackdrop"></div>
+        <div class="relative min-h-screen flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden fade-in">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="font-serif text-lg font-semibold text-primary-600">Request Book 请求借阅</h3>
+                    <button id="closeRequestBtn" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p id="requestBookInfo" class="text-sm text-gray-600 mb-4"></p>
+                    <div class="mb-4">
+                        <label for="requestNote" class="block text-sm font-medium text-gray-700 mb-2">Message to owner (optional) 给书主的留言（可选）</label>
+                        <textarea id="requestNote" rows="3" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none" placeholder="e.g. I'd love to borrow this book! Could you bring it next Sunday? 例如：我很想借这本书！下周日可以带来吗？"></textarea>
+                    </div>
+                    <button id="submitRequestBtn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 px-6 rounded-xl transition-colors">
+                        Send Request 发送请求
+                    </button>
                 </div>
             </div>
         </div>
@@ -511,7 +549,7 @@
         // Firebase configuration - REPLACE WITH YOUR OWN CONFIG
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, orderBy, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, orderBy, where, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         // ============================================
         // IMPORTANT: Replace with your Firebase config
         // ============================================
@@ -538,6 +576,13 @@
         const CLOUDINARY_CLOUD_NAME = 'dwnrrvwxz';  // 从 Cloudinary Dashboard 获取
         const CLOUDINARY_UPLOAD_PRESET = 'book-exchanger'; // 你创建的 unsigned preset 名称
 
+        // ============================================
+        // Email notifications are handled server-side by
+        // Firebase Extension "Trigger Email from Firestore"
+        // No email credentials needed in client code!
+        // See DEPLOY.md for setup instructions.
+        // ============================================
+
         // State
         let currentUser = null;
         let isAdmin = false;
@@ -546,6 +591,7 @@
         let selectedImages = [];  // Array of new images to upload
         let existingImageUrls = [];  // Array of existing image URLs when editing
         let editingBook = null;
+        let requestingBook = null;  // Book being requested
         let searchTimeout = null;
 
         // ============================================
@@ -606,6 +652,10 @@
         const filterStatus = document.getElementById('filterStatus');
         const filterOwner = document.getElementById('filterOwner');
         const filterLanguage = document.getElementById('filterLanguage');
+        const requestModal = document.getElementById('requestModal');
+        const requestBackdrop = document.getElementById('requestBackdrop');
+        const closeRequestBtn = document.getElementById('closeRequestBtn');
+        const submitRequestBtn = document.getElementById('submitRequestBtn');
 
         // Show toast notification
         function showToast(message, type = 'success') {
@@ -1313,6 +1363,15 @@
                             ${isOwner ? 'Edit Book 编辑书籍' : 'Edit Book (Admin) 编辑书籍（管理员）'}
                         </button>
                     ` : ''}
+                    
+                    ${!isOwner && book.status === 'available' ? `
+                        <button id="requestBookBtn" class="w-full ${canEdit ? 'mt-3' : 'mt-6'} bg-warm-100 hover:bg-warm-200 text-warm-700 font-medium py-2.5 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            Request Book 请求借阅
+                        </button>
+                    ` : ''}
                 </div>
             `;
             
@@ -1345,6 +1404,9 @@
                 closeDetailModal();
                 openBookModal(book);
             });
+            document.getElementById('requestBookBtn')?.addEventListener('click', () => {
+                openRequestModal(book);
+            });
             
             // Gallery navigation
             if (allImages.length > 1) {
@@ -1365,12 +1427,127 @@
                     });
                 });
             }
+            
+            // Async: check if user already has a pending request, update button state
+            if (!isOwner && book.status === 'available') {
+                checkExistingRequest(book.id).then(hasPending => {
+                    const reqBtn = document.getElementById('requestBookBtn');
+                    if (hasPending && reqBtn) {
+                        reqBtn.disabled = true;
+                        reqBtn.innerHTML = `
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Requested 已请求
+                        `;
+                        reqBtn.classList.remove('hover:bg-warm-200');
+                        reqBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                    }
+                });
+            }
         }
 
         // Close detail modal
         function closeDetailModal() {
             detailModal.classList.add('hidden');
             document.body.style.overflow = '';
+        }
+
+        // Open request modal
+        async function openRequestModal(book) {
+            requestingBook = book;
+            
+            // Check for existing pending request (single-field query to avoid composite index)
+            const hasPending = await checkExistingRequest(book.id);
+            if (hasPending) {
+                showToast('You already requested this book 您已请求过这本书', 'error');
+                return;
+            }
+            
+            document.getElementById('requestBookInfo').innerHTML = `
+                Requesting 请求借阅: <strong>${escapeHtml(book.title)}</strong><br>
+                <span class="text-gray-400">Owner 书主: ${escapeHtml(book.ownerName)}</span>
+            `;
+            document.getElementById('requestNote').value = '';
+            submitRequestBtn.disabled = false;
+            submitRequestBtn.innerHTML = 'Send Request 发送请求';
+            
+            requestModal.classList.remove('hidden');
+        }
+
+        // Check if current user has a pending request for this book
+        // Uses single where() to avoid needing a Firestore composite index
+        async function checkExistingRequest(bookId) {
+            try {
+                const snapshot = await getDocs(query(
+                    collection(db, 'requests'),
+                    where('bookId', '==', bookId)
+                ));
+                return snapshot.docs.some(d => {
+                    const data = d.data();
+                    return data.requesterEmail === currentUser.email && data.status === 'pending';
+                });
+            } catch (error) {
+                console.error('Check existing request error:', error);
+                return false;
+            }
+        }
+
+        // Close request modal
+        function closeRequestModal() {
+            requestModal.classList.add('hidden');
+            requestingBook = null;
+        }
+
+        // Handle request submission
+        async function handleRequestSubmit() {
+            if (!requestingBook || !currentUser) return;
+            
+            submitRequestBtn.disabled = true;
+            submitRequestBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-white border-t-transparent"></div>';
+            
+            const note = document.getElementById('requestNote').value.trim();
+            const requesterName = currentUser.displayName || currentUser.email.split('@')[0];
+            
+            try {
+                // Save request to Firestore
+                // The Cloud Function will detect this and trigger an email notification
+                await addDoc(collection(db, 'requests'), {
+                    bookId: requestingBook.id,
+                    bookTitle: requestingBook.title,
+                    ownerEmail: requestingBook.ownerEmail,
+                    ownerName: requestingBook.ownerName,
+                    requesterEmail: currentUser.email,
+                    requesterName: requesterName,
+                    note: note,
+                    status: 'pending',
+                    emailSent: false,
+                    timestamp: serverTimestamp()
+                });
+                
+                showToast('Request sent! Owner will be notified 请求已发送！书主将收到通知');
+                
+                // Update request button in detail modal
+                const reqBtn = document.getElementById('requestBookBtn');
+                if (reqBtn) {
+                    reqBtn.disabled = true;
+                    reqBtn.innerHTML = `
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Requested 已请求
+                    `;
+                    reqBtn.classList.remove('hover:bg-warm-200');
+                    reqBtn.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+                
+                closeRequestModal();
+            } catch (error) {
+                console.error('Request error:', error);
+                showToast('Request failed, please retry 请求失败，请重试', 'error');
+                submitRequestBtn.disabled = false;
+                submitRequestBtn.innerHTML = 'Send Request 发送请求';
+            }
         }
 
         // Open admin panel
@@ -1463,6 +1640,72 @@
             openAdminPanel(); // Refresh
         }
 
+        // Batch add emails to whitelist
+        async function handleBatchAddEmails() {
+            const input = document.getElementById('batchEmailInput');
+            const resultEl = document.getElementById('batchResult');
+            const raw = input.value.trim();
+            
+            if (!raw) {
+                showToast('Please paste emails first 请先粘贴邮箱', 'error');
+                return;
+            }
+            
+            // Parse: split by comma, semicolon, or whitespace (includes newlines)
+            const emails = raw.split(/[,;\s]+/)
+                .map(e => e.trim().toLowerCase())
+                .filter(e => e.length > 0);
+            
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            let added = 0, skipped = 0, invalid = 0;
+            const invalidList = [];
+            const addedBefore = [...whitelist]; // snapshot for rollback
+            
+            for (const email of emails) {
+                if (!emailRegex.test(email)) {
+                    invalid++;
+                    invalidList.push(email);
+                    continue;
+                }
+                if (whitelist.includes(email)) {
+                    skipped++;
+                    continue;
+                }
+                whitelist.push(email);
+                added++;
+            }
+            
+            if (added > 0) {
+                try {
+                    await setDoc(doc(db, 'settings', 'whitelist'), { emails: whitelist });
+                } catch (error) {
+                    console.error('Batch add error:', error);
+                    // Rollback in-memory whitelist
+                    whitelist.length = 0;
+                    whitelist.push(...addedBefore);
+                    showToast('Save failed, please retry 保存失败，请重试', 'error');
+                    return;
+                }
+            }
+            
+            // Show result
+            let resultMsg = `Added 已添加: ${added}`;
+            if (skipped > 0) resultMsg += ` · Duplicates 重复: ${skipped}`;
+            if (invalid > 0) resultMsg += ` · Invalid 无效: ${invalid} (${invalidList.join(', ')})`;
+            
+            resultEl.textContent = resultMsg;
+            resultEl.className = `text-sm mt-2 ${added > 0 ? 'text-green-600' : 'text-amber-600'}`;
+            resultEl.classList.remove('hidden');
+            
+            if (added > 0) {
+                input.value = '';
+                showToast(`${added} email(s) added 已添加${added}个邮箱`);
+                openAdminPanel(); // Refresh
+            } else if (invalid > 0) {
+                showToast(`No valid new emails to add 无有效新邮箱可添加`, 'error');
+            }
+        }
+
         // Auth state observer
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -1516,6 +1759,10 @@
         document.getElementById('newEmailInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleAddEmail();
         });
+        document.getElementById('batchAddBtn').addEventListener('click', handleBatchAddEmails);
+        closeRequestBtn.addEventListener('click', closeRequestModal);
+        requestBackdrop.addEventListener('click', closeRequestModal);
+        submitRequestBtn.addEventListener('click', handleRequestSubmit);
 
         // Image upload handlers
         uploadArea.addEventListener('click', () => imageInput.click());
@@ -1551,6 +1798,7 @@
                 closeBookModal();
                 closeDetailModal();
                 closeAdminPanel();
+                closeRequestModal();
             }
         });
     </script>
