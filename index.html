@@ -250,18 +250,33 @@
         <!-- Unauthorized State -->
         <div id="unauthorizedState" class="hidden flex flex-col items-center justify-center py-20">
             <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-                <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <svg class="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                <div class="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-10 h-10 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
                     </svg>
                 </div>
-                <h2 class="font-serif text-2xl font-semibold text-gray-800 mb-2">Account Pending 账号待审核</h2>
-                <p class="text-gray-500 mb-4">Your account has been created, but is not yet authorized.<br>您的账号已创建，但尚未获得授权。</p>
-                <p class="text-gray-400 text-sm mb-6">Please contact the administrator to approve your access.<br>请联系管理员审批您的访问权限。</p>
+                <h2 class="font-serif text-2xl font-semibold text-gray-800 mb-2">Enter Invite Code 输入邀请码</h2>
+                <p class="text-gray-500 mb-6">Please enter the invite code to join.<br>请输入邀请码以加入平台。</p>
                 <p id="userEmailDisplay" class="text-sm text-gray-500 mb-4"></p>
-                <button id="logoutBtnUnauth" class="text-primary-600 hover:text-primary-700 font-medium">
-                    Switch Account 切换账号
-                </button>
+                
+                <!-- Invite Code Input -->
+                <div class="space-y-4 mb-6">
+                    <input type="text" id="inviteCodeInput" placeholder="Invite Code 邀请码" 
+                        class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-center text-lg tracking-widest font-mono"
+                        maxlength="32" autocomplete="off" spellcheck="false">
+                    <button id="submitInviteCodeBtn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-xl transition-colors">
+                        Join 加入
+                    </button>
+                    <p id="inviteCodeError" class="text-red-500 text-sm hidden"></p>
+                    <p id="inviteCodeSuccess" class="text-green-600 text-sm hidden"></p>
+                </div>
+                
+                <div class="border-t border-gray-100 pt-4">
+                    <p class="text-gray-400 text-xs mb-3">Don't have a code? Ask a church member or contact admin.<br>没有邀请码？请询问教会成员或联系管理员。</p>
+                    <button id="logoutBtnUnauth" class="text-primary-600 hover:text-primary-700 font-medium text-sm">
+                        Switch Account 切换账号
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -346,6 +361,15 @@
             </div>
         </div>
     </main>
+
+    <!-- Footer with Disclaimer -->
+    <footer class="max-w-6xl mx-auto px-4 py-6 mt-8 border-t border-gray-200">
+        <p class="text-center text-xs text-gray-400 leading-relaxed">
+            The ECC Book Exchanger is an unofficial resource-sharing platform. Inclusion of a book does not imply endorsement by ECC or its elders. Please read with discernment.
+            <br>
+            ECC书籍交换站为非官方资源分享平台，收录书籍不代表教会或长老的背书。请以分辨力阅读。
+        </p>
+    </footer>
 
     <!-- Add/Edit Book Modal -->
     <div id="bookModal" class="fixed inset-0 z-50 hidden">
@@ -519,6 +543,51 @@
                         <p id="batchResult" class="text-sm mt-2 hidden"></p>
                     </div>
                     
+                    <!-- Invite Code Management -->
+                    <div class="mb-8">
+                        <h4 class="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            Invite Code 邀请码
+                        </h4>
+                        <p class="text-sm text-gray-500 mb-3">Share this code with church members so they can join without manual whitelist approval.<br>将此邀请码分享给教会成员，他们即可自行加入，无需手动审批。</p>
+                        <div class="bg-primary-50 rounded-lg p-4 mb-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm text-gray-600">Current Code 当前邀请码:</span>
+                                <span id="currentInviteCode" class="font-mono text-lg font-semibold text-primary-700 tracking-wider">—</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs text-gray-500">
+                                <span>Whitelisted 白名单人数: <span id="inviteCodeTotalCount" class="font-semibold">0</span> / <span id="inviteCodeTotalCap">200</span></span>
+                                <span>Today 今日加入: <span id="inviteCodeDailyCount" class="font-semibold">0</span> / <span id="inviteCodeDailyCap">20</span></span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3">
+                            <div class="flex gap-2">
+                                <input type="text" id="newInviteCodeInput" placeholder="New invite code 新邀请码" 
+                                    class="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono tracking-wider" maxlength="32">
+                                <button id="updateInviteCodeBtn" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                                    Update 更新
+                                </button>
+                            </div>
+                            <div class="flex gap-2">
+                                <div class="flex-1">
+                                    <label class="text-xs text-gray-500">Max Total 总人数上限</label>
+                                    <input type="number" id="inviteMaxTotal" min="1" max="9999" value="200" class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="text-xs text-gray-500">Max Daily 每日上限</label>
+                                    <input type="number" id="inviteMaxDaily" min="1" max="999" value="20" class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                </div>
+                                <div class="flex items-end">
+                                    <button id="updateInviteCapsBtn" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg transition-colors text-sm whitespace-nowrap">
+                                        Save 保存
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Borrowing History -->
                     <div>
                         <h4 class="font-medium text-gray-800 mb-4">Borrowing History 借阅记录</h4>
@@ -569,6 +638,7 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, orderBy, where, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
         // ============================================
         // IMPORTANT: Replace with your Firebase config
         // ============================================
@@ -587,6 +657,7 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
+        const functions = getFunctions(app);
 
         // ============================================
         // Cloudinary Configuration
@@ -676,6 +747,10 @@
         const requestBackdrop = document.getElementById('requestBackdrop');
         const closeRequestBtn = document.getElementById('closeRequestBtn');
         const submitRequestBtn = document.getElementById('submitRequestBtn');
+        const inviteCodeInput = document.getElementById('inviteCodeInput');
+        const submitInviteCodeBtn = document.getElementById('submitInviteCodeBtn');
+        const inviteCodeError = document.getElementById('inviteCodeError');
+        const inviteCodeSuccess = document.getElementById('inviteCodeSuccess');
 
         // Show toast notification
         function showToast(message, type = 'success') {
@@ -879,6 +954,51 @@
                     errorMsg = 'Invalid email format 邮箱格式无效';
                 }
                 showLoginError(errorMsg);
+            }
+        }
+
+        // Invite code submit handler
+        async function handleInviteCodeSubmit() {
+            const code = inviteCodeInput.value.trim();
+            
+            if (!code) {
+                inviteCodeError.textContent = 'Please enter the invite code 请输入邀请码';
+                inviteCodeError.classList.remove('hidden');
+                inviteCodeSuccess.classList.add('hidden');
+                return;
+            }
+            
+            try {
+                submitInviteCodeBtn.disabled = true;
+                submitInviteCodeBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-white border-t-transparent"></div>';
+                inviteCodeError.classList.add('hidden');
+                inviteCodeSuccess.classList.add('hidden');
+                
+                const verifyInviteCode = httpsCallable(functions, 'verifyInviteCode');
+                const result = await verifyInviteCode({ code });
+                
+                if (result.data.success) {
+                    inviteCodeSuccess.textContent = 'Welcome! Redirecting... 欢迎！正在跳转...';
+                    inviteCodeSuccess.classList.remove('hidden');
+                    // Reload to trigger onAuthStateChanged with updated whitelist
+                    setTimeout(() => location.reload(), 1000);
+                }
+            } catch (error) {
+                console.error('Invite code error:', error);
+                let errorMsg = 'Verification failed 验证失败';
+                const code_str = error.code || '';
+                const msg = error.message || '';
+                if (code_str.includes('permission-denied') || msg.includes('Invalid')) {
+                    errorMsg = 'Invalid invite code 邀请码无效';
+                } else if (code_str.includes('resource-exhausted') || msg.includes('limit') || msg.includes('Maximum')) {
+                    errorMsg = 'Registration limit reached. Please contact admin. 注册名额已满，请联系管理员。';
+                } else if (code_str.includes('not-found') || msg.includes('not configured')) {
+                    errorMsg = 'Invite system not configured. Please contact admin. 邀请系统未配置，请联系管理员。';
+                }
+                inviteCodeError.textContent = errorMsg;
+                inviteCodeError.classList.remove('hidden');
+                submitInviteCodeBtn.disabled = false;
+                submitInviteCodeBtn.innerHTML = 'Join 加入';
             }
         }
 
@@ -1699,6 +1819,30 @@
                 }).join('');
             }
             
+            // Load invite code settings
+            try {
+                const inviteCodeDoc = await getDoc(doc(db, 'settings', 'inviteCode'));
+                if (inviteCodeDoc.exists()) {
+                    const data = inviteCodeDoc.data();
+                    document.getElementById('currentInviteCode').textContent = data.code || '—';
+                    document.getElementById('inviteMaxTotal').value = data.maxTotal || 200;
+                    document.getElementById('inviteMaxDaily').value = data.maxDaily || 20;
+                    document.getElementById('inviteCodeTotalCap').textContent = data.maxTotal || 200;
+                    document.getElementById('inviteCodeDailyCap').textContent = data.maxDaily || 20;
+                } else {
+                    document.getElementById('currentInviteCode').textContent = 'Not set 未设置';
+                }
+                // Show whitelist count
+                document.getElementById('inviteCodeTotalCount').textContent = whitelist.length;
+                
+                // Count today's redemptions
+                const today = new Date().toISOString().split('T')[0];
+                const redemptionsSnapshot = await getDocs(query(collection(db, 'codeRedemptions'), where('date', '==', today)));
+                document.getElementById('inviteCodeDailyCount').textContent = redemptionsSnapshot.size;
+            } catch (error) {
+                console.error('Failed to load invite code settings:', error);
+            }
+            
             adminModal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
         }
@@ -1830,6 +1974,62 @@
             }
         }
 
+        // Update invite code
+        async function handleUpdateInviteCode() {
+            const input = document.getElementById('newInviteCodeInput');
+            const newCode = input.value.trim();
+            
+            if (!newCode) {
+                showToast('Please enter a new invite code 请输入新的邀请码', 'error');
+                return;
+            }
+            if (newCode.length < 4) {
+                showToast('Invite code must be at least 4 characters 邀请码至少4个字符', 'error');
+                return;
+            }
+            
+            try {
+                const inviteCodeDoc = await getDoc(doc(db, 'settings', 'inviteCode'));
+                const existing = inviteCodeDoc.exists() ? inviteCodeDoc.data() : {};
+                await setDoc(doc(db, 'settings', 'inviteCode'), {
+                    ...existing,
+                    code: newCode
+                });
+                input.value = '';
+                showToast('Invite code updated 邀请码已更新');
+                openAdminPanel(); // Refresh
+            } catch (error) {
+                console.error('Update invite code error:', error);
+                showToast('Failed to update invite code 更新邀请码失败', 'error');
+            }
+        }
+
+        // Update invite code caps
+        async function handleUpdateInviteCaps() {
+            const maxTotal = parseInt(document.getElementById('inviteMaxTotal').value) || 200;
+            const maxDaily = parseInt(document.getElementById('inviteMaxDaily').value) || 20;
+            
+            if (maxTotal < 1 || maxDaily < 1) {
+                showToast('Limits must be at least 1 限制至少为1', 'error');
+                return;
+            }
+            
+            try {
+                const inviteCodeDoc = await getDoc(doc(db, 'settings', 'inviteCode'));
+                const existing = inviteCodeDoc.exists() ? inviteCodeDoc.data() : {};
+                await setDoc(doc(db, 'settings', 'inviteCode'), {
+                    ...existing,
+                    maxTotal,
+                    maxDaily
+                });
+                showToast('Limits updated 上限已更新');
+                openAdminPanel(); // Refresh
+            } catch (error) {
+                console.error('Update caps error:', error);
+                showToast('Failed to update limits 更新上限失败', 'error');
+            }
+        }
+
         // Auth state observer
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -1852,6 +2052,12 @@
                     if (emailDisplay) {
                         emailDisplay.textContent = `Your email 您的邮箱: ${user.email}`;
                     }
+                    // Reset invite code UI
+                    inviteCodeInput.value = '';
+                    inviteCodeError.classList.add('hidden');
+                    inviteCodeSuccess.classList.add('hidden');
+                    submitInviteCodeBtn.disabled = false;
+                    submitInviteCodeBtn.innerHTML = 'Join 加入';
                     updateHeaderActions();
                 }
             } else {
@@ -1891,6 +2097,15 @@
         closeRequestBtn.addEventListener('click', closeRequestModal);
         requestBackdrop.addEventListener('click', closeRequestModal);
         submitRequestBtn.addEventListener('click', handleRequestSubmit);
+        submitInviteCodeBtn.addEventListener('click', handleInviteCodeSubmit);
+        inviteCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleInviteCodeSubmit();
+        });
+        document.getElementById('updateInviteCodeBtn').addEventListener('click', handleUpdateInviteCode);
+        document.getElementById('newInviteCodeInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleUpdateInviteCode();
+        });
+        document.getElementById('updateInviteCapsBtn').addEventListener('click', handleUpdateInviteCaps);
 
         // Image upload handlers
         uploadArea.addEventListener('click', () => imageInput.click());
