@@ -752,7 +752,7 @@
                     adminEmails = data.emails;
                     return adminEmails.includes(email);
                 }
-                // Old format: single email string — auto-migrate on next admin write
+                // Old format: single email string
                 if (data.email) {
                     adminEmails = [data.email];
                     return data.email === email;
@@ -1582,14 +1582,30 @@
         }
 
         // Open admin panel
+        // Helper: write admin list to Firestore, keeping old email field for rules compatibility
+        async function saveAdminEmails(emails) {
+            await setDoc(doc(db, 'settings', 'admin'), {
+                emails: emails,
+                email: emails[0] || ''   // preserve old field so Firestore rules still work
+            });
+        }
+
         async function openAdminPanel() {
             if (!isAdmin) return;
             
-            // Load admin list (refresh from DB)
-            const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
-            if (adminDoc.exists()) {
-                const data = adminDoc.data();
-                adminEmails = Array.isArray(data.emails) ? data.emails : (data.email ? [data.email] : []);
+            try {
+                // Load admin list (refresh from DB)
+                const adminDoc = await getDoc(doc(db, 'settings', 'admin'));
+                if (adminDoc.exists()) {
+                    const data = adminDoc.data();
+                    adminEmails = Array.isArray(data.emails) ? [...data.emails] : (data.email ? [data.email] : []);
+                } else {
+                    adminEmails = [];
+                }
+            } catch (error) {
+                console.error('Failed to load admin list:', error);
+                showToast('Failed to load admin list 加载管理员列表失败', 'error');
+                // Use whatever is in memory as fallback
             }
             
             // Render admin list
@@ -1619,10 +1635,16 @@
                     const index = parseInt(btn.dataset.index);
                     const removedEmail = adminEmails[index];
                     if (!confirm(`Remove admin ${removedEmail}?\n确定移除管理员 ${removedEmail}？`)) return;
-                    adminEmails.splice(index, 1);
-                    await setDoc(doc(db, 'settings', 'admin'), { emails: adminEmails });
-                    showToast('Admin removed 管理员已移除');
-                    openAdminPanel(); // Refresh
+                    try {
+                        const updated = adminEmails.filter((_, i) => i !== index);
+                        await saveAdminEmails(updated);
+                        adminEmails = updated;
+                        showToast('Admin removed 管理员已移除');
+                        openAdminPanel(); // Refresh
+                    } catch (error) {
+                        console.error('Remove admin error:', error);
+                        showToast('Failed to remove admin 移除管理员失败', 'error');
+                    }
                 });
             });
             
@@ -1790,16 +1812,22 @@
                 return;
             }
             
-            if (adminEmails.includes(email)) {
+            if (adminEmails.map(e => e.toLowerCase()).includes(email)) {
                 showToast('Already an admin 已经是管理员', 'error');
                 return;
             }
             
-            adminEmails.push(email);
-            await setDoc(doc(db, 'settings', 'admin'), { emails: adminEmails });
-            input.value = '';
-            showToast('Admin added 管理员已添加');
-            openAdminPanel(); // Refresh
+            try {
+                const updated = [...adminEmails, email];
+                await saveAdminEmails(updated);
+                adminEmails = updated;
+                input.value = '';
+                showToast('Admin added 管理员已添加');
+                openAdminPanel(); // Refresh
+            } catch (error) {
+                console.error('Add admin error:', error);
+                showToast('Failed to add admin 添加管理员失败', 'error');
+            }
         }
 
         // Auth state observer
