@@ -280,6 +280,33 @@
             </div>
         </div>
 
+        <!-- Email Verification Pending State -->
+        <div id="verifyEmailState" class="hidden flex flex-col items-center justify-center py-20">
+            <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+                <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <h2 class="font-serif text-2xl font-semibold text-gray-800 mb-2">Verify Your Email 验证邮箱</h2>
+                <p class="text-gray-500 mb-2">A verification link has been sent to:<br>验证链接已发送至：</p>
+                <p id="verifyEmailAddress" class="font-medium text-primary-600 mb-4"></p>
+                <p class="text-gray-400 text-sm mb-6">Please check your inbox (and spam folder) and click the link to verify.<br>请查看收件箱（及垃圾邮件），点击链接完成验证。</p>
+                <div class="space-y-3">
+                    <button id="refreshVerificationBtn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-6 rounded-xl transition-colors">
+                        I've Verified — Continue 已验证，继续
+                    </button>
+                    <button id="resendVerificationBtn" class="w-full bg-warm-100 hover:bg-warm-200 text-warm-700 font-medium py-2.5 px-6 rounded-xl transition-colors text-sm">
+                        Resend Email 重新发送
+                    </button>
+                    <button id="logoutBtnVerify" class="text-primary-600 hover:text-primary-700 font-medium text-sm">
+                        Switch Account 切换账号
+                    </button>
+                </div>
+                <p id="verifyEmailMsg" class="text-sm mt-4 hidden"></p>
+            </div>
+        </div>
+
         <!-- Main App State -->
         <div id="appState" class="hidden">
             <!-- Stats Bar -->
@@ -364,10 +391,8 @@
 
     <!-- Footer with Disclaimer -->
     <footer class="max-w-6xl mx-auto px-4 py-6 mt-8 border-t border-gray-200">
-        <p class="text-center text-xs text-gray-400 leading-relaxed">
-            The ECC Book Exchanger is an unofficial resource-sharing platform. Inclusion of a book does not imply endorsement by ECC or its elders. Please read with discernment.
-            <br>
-            ECC书籍交换站为非官方资源分享平台，收录书籍不代表教会或长老的背书。请以分辨力阅读。
+        <p class="text-center text-xs text-gray-400 leading-relaxed max-w-2xl mx-auto">
+            The ECC Book Exchanger is a platform intended to help members share resources they have found beneficial. It is not an official ministry of ECC, and inclusion of any book does not imply endorsement by the church or its elders. Members are encouraged to exercise biblical discernment in both the materials they choose to share and those they choose to read.
         </p>
     </footer>
 
@@ -619,7 +644,11 @@
                         <label for="requestNote" class="block text-sm font-medium text-gray-700 mb-2">Message to owner (optional) 给书主的留言（可选）</label>
                         <textarea id="requestNote" rows="3" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none" placeholder="e.g. I'd love to borrow this book! Could you bring it next Sunday? 例如：我很想借这本书！下周日可以带来吗？"></textarea>
                     </div>
-                    <button id="submitRequestBtn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 px-6 rounded-xl transition-colors">
+                    <label class="flex items-start gap-3 mb-5 cursor-pointer group">
+                        <input type="checkbox" id="reimburseCheckbox" class="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer">
+                        <span class="text-xs text-gray-500 leading-relaxed group-hover:text-gray-700 transition-colors">I acknowledge that I will reimburse the cost of the book if it is damaged, lost, or not returned in a timely manner. 我确认如果书籍损坏、遗失或未能及时归还，我将承担赔偿费用。</span>
+                    </label>
+                    <button id="submitRequestBtn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 px-6 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed" disabled>
                         Send Request 发送请求
                     </button>
                 </div>
@@ -636,7 +665,7 @@
     <script type="module">
         // Firebase configuration - REPLACE WITH YOUR OWN CONFIG
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, orderBy, where, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
         // ============================================
@@ -751,6 +780,7 @@
         const submitInviteCodeBtn = document.getElementById('submitInviteCodeBtn');
         const inviteCodeError = document.getElementById('inviteCodeError');
         const inviteCodeSuccess = document.getElementById('inviteCodeSuccess');
+        const verifyEmailState = document.getElementById('verifyEmailState');
 
         // Show toast notification
         function showToast(message, type = 'success') {
@@ -766,6 +796,7 @@
             loadingState.classList.add('hidden');
             loginState.classList.add('hidden');
             unauthorizedState.classList.add('hidden');
+            verifyEmailState.classList.add('hidden');
             appState.classList.add('hidden');
             state.classList.remove('hidden');
         }
@@ -914,8 +945,10 @@
                 emailRegisterBtn.disabled = true;
                 emailRegisterBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-warm-700 border-t-transparent"></div>';
                 // Just create account - whitelist check happens in onAuthStateChanged
-                await createUserWithEmailAndPassword(auth, email, password);
-                // Note: If not in whitelist, user will see unauthorized page and can contact admin
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // Send verification email
+                await sendEmailVerification(userCredential.user);
+                // onAuthStateChanged will detect unverified email and show verify state
             } catch (error) {
                 console.error('Register error:', error);
                 let errorMsg = 'Registration failed 注册失败';
@@ -1620,7 +1653,8 @@
                 <span class="text-gray-400">Owner 书主: ${escapeHtml(book.ownerName)}</span>
             `;
             document.getElementById('requestNote').value = '';
-            submitRequestBtn.disabled = false;
+            document.getElementById('reimburseCheckbox').checked = false;
+            submitRequestBtn.disabled = true;
             submitRequestBtn.innerHTML = 'Send Request 发送请求';
             
             requestModal.classList.remove('hidden');
@@ -1653,6 +1687,7 @@
         // Handle request submission
         async function handleRequestSubmit() {
             if (!requestingBook || !currentUser) return;
+            if (!document.getElementById('reimburseCheckbox').checked) return;
             
             submitRequestBtn.disabled = true;
             submitRequestBtn.innerHTML = '<div class="spinner w-5 h-5 mx-auto border-white border-t-transparent"></div>';
@@ -1672,6 +1707,7 @@
                     requesterName: requesterName,
                     note: note,
                     status: 'pending',
+                    reimburseAcknowledged: true,
                     emailSent: false,
                     timestamp: serverTimestamp()
                 });
@@ -2035,6 +2071,15 @@
             if (user) {
                 currentUser = user;
                 
+                // For email/password users, require email verification
+                const isEmailProvider = user.providerData.some(p => p.providerId === 'password');
+                if (isEmailProvider && !user.emailVerified) {
+                    showState(verifyEmailState);
+                    document.getElementById('verifyEmailAddress').textContent = user.email;
+                    updateHeaderActions();
+                    return;
+                }
+                
                 // Check if admin
                 isAdmin = await checkAdmin(user.email);
                 
@@ -2071,6 +2116,40 @@
         // Event listeners
         loginBtn.addEventListener('click', handleLogin);
         logoutBtnUnauth.addEventListener('click', handleLogout);
+        document.getElementById('logoutBtnVerify').addEventListener('click', handleLogout);
+        document.getElementById('refreshVerificationBtn').addEventListener('click', async () => {
+            // Reload user to check if they've verified
+            try {
+                await currentUser.reload();
+                if (currentUser.emailVerified) {
+                    location.reload();
+                } else {
+                    const msg = document.getElementById('verifyEmailMsg');
+                    msg.textContent = 'Email not yet verified. Please check your inbox. 邮箱尚未验证，请检查收件箱。';
+                    msg.className = 'text-sm mt-4 text-amber-600';
+                    msg.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Reload error:', error);
+            }
+        });
+        document.getElementById('resendVerificationBtn').addEventListener('click', async () => {
+            try {
+                await sendEmailVerification(currentUser);
+                const msg = document.getElementById('verifyEmailMsg');
+                msg.textContent = 'Verification email sent! 验证邮件已发送！';
+                msg.className = 'text-sm mt-4 text-green-600';
+                msg.classList.remove('hidden');
+                showToast('Verification email sent 验证邮件已发送');
+            } catch (error) {
+                console.error('Resend error:', error);
+                if (error.code === 'auth/too-many-requests') {
+                    showToast('Too many attempts. Please wait a moment. 请求过于频繁，请稍等。', 'error');
+                } else {
+                    showToast('Failed to resend 发送失败', 'error');
+                }
+            }
+        });
         document.getElementById('emailLoginBtn').addEventListener('click', handleEmailLogin);
         document.getElementById('emailRegisterBtn').addEventListener('click', handleEmailRegister);
         document.getElementById('forgotPasswordBtn').addEventListener('click', handleForgotPassword);
@@ -2097,6 +2176,9 @@
         closeRequestBtn.addEventListener('click', closeRequestModal);
         requestBackdrop.addEventListener('click', closeRequestModal);
         submitRequestBtn.addEventListener('click', handleRequestSubmit);
+        document.getElementById('reimburseCheckbox').addEventListener('change', (e) => {
+            submitRequestBtn.disabled = !e.target.checked;
+        });
         submitInviteCodeBtn.addEventListener('click', handleInviteCodeSubmit);
         inviteCodeInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleInviteCodeSubmit();
