@@ -431,10 +431,10 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
                                 <p class="text-gray-500">Click or drag to upload 点击或拖拽上传</p>
-                                <p class="text-gray-400 text-sm mt-1">JPG, PNG supported (max 5 photos 最多5张)</p>
+                                <p class="text-gray-400 text-sm mt-1">JPG, PNG, HEIC, HEIF supported (max 5 photos 最多5张)</p>
                             </div>
                         </div>
-                        <input type="file" id="imageInput" accept="image/*" multiple class="hidden">
+                        <input type="file" id="imageInput" accept="image/*,.heic,.heif,image/heic,image/heif" multiple class="hidden">
                         
                         <!-- New Images Preview -->
                         <div id="newImagesContainer" class="hidden mt-3">
@@ -662,6 +662,7 @@
     </div>
 
     <!-- Firebase SDK -->
+    <script src="./heic2any.min.js"></script> 
     <script type="module">
         // Firebase configuration - REPLACE WITH YOUR OWN CONFIG
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -723,6 +724,47 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        function getFileExt(name = '') {
+            return name.toLowerCase().split('.').pop() || '';
+        }
+
+        function isHeicLikeFile(file) {
+            const ext = getFileExt(file?.name || '');
+            const type = (file?.type || '').toLowerCase();
+        
+            return ['heic', 'heif'].includes(ext) ||
+                ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'].includes(type);
+        }
+
+        function isSupportedImageFile(file) {
+            if (file?.type && file.type.startsWith('image/')) return true;
+            return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'].includes(getFileExt(file?.name || ''));
+        }
+
+        async function convertHeicToJpeg(file) {
+            if (typeof window.heic2any !== 'function') {
+                throw new Error('heic2any is not loaded');
+            }
+
+            const result = await window.heic2any({
+                blob: file,
+                toType: 'image/jpeg',
+                quality: 0.85
+            });
+
+            const blob = Array.isArray(result) ? result[0] : result;
+        
+            return new File(
+                [blob],
+                file.name.replace(/\.(heic|heif)$/i, '.jpg'),
+                {
+                    type: 'image/jpeg',
+                    lastModified: file.lastModified || Date.now()
+                }
+            );
+        }
+
 
         // Debounce function for search optimization
         function debounce(func, wait) {
@@ -1269,34 +1311,57 @@
         }
 
         // Handle image selection (multiple files)
-        function handleImageSelect(files) {
+        async function handleImageSelect(files) {
             if (!files || files.length === 0) return;
-            
-            const totalImages = existingImageUrls.length + selectedImages.length + files.length;
-            if (totalImages > 5) {
-                showToast('Maximum 5 photos allowed 最多5张照片', 'error');
-                return;
-            }
-            
-            for (const file of files) {
-                // Validate file type
-                if (!file.type.startsWith('image/')) {
-                    showToast('Please select image files only 请只选择图片文件', 'error');
-                    continue;
+        
+            try {
+                const preparedFiles = [];
+        
+                for (const rawFile of Array.from(files)) {
+                    if (!isSupportedImageFile(rawFile)) {
+                        showToast('Please select image files only 请只选择图片文件', 'error');
+                        continue;
+                    }
+        
+                    let file = rawFile;
+        
+                    if (isHeicLikeFile(rawFile)) {
+                        try {
+                            file = await convertHeicToJpeg(rawFile);
+                        } catch (error) {
+                            console.error('HEIC conversion failed:', error);
+                            showToast(`${rawFile.name} conversion failed 图片转换失败`, 'error');
+                            continue;
+                        }
+                    }
+        
+                    if (file.size > 5 * 1024 * 1024) {
+                        showToast(`${file.name} is too large (max 5MB) 文件过大`, 'error');
+                        continue;
+                    }
+        
+                    preparedFiles.push(file);
                 }
-                
-                // Validate file size (max 5MB)
-                if (file.size > 5 * 1024 * 1024) {
-                    showToast(`${file.name} is too large (max 5MB) 文件过大`, 'error');
-                    continue;
+        
+                const totalImages = existingImageUrls.length + selectedImages.length + preparedFiles.length;
+                if (totalImages > 5) {
+                    showToast('Maximum 5 photos allowed 最多5张照片', 'error');
+                    return;
                 }
-                
-                selectedImages.push(file);
+        
+                selectedImages.push(...preparedFiles);
+                renderNewImagePreviews();
+            } catch (error) {
+                console.error('Image processing failed:', error);
+                showToast('Image processing failed 图片处理失败', 'error');
+            } finally {
+                imageInput.value = '';
             }
-            
-            renderNewImagePreviews();
         }
 
+
+
+        
         // Upload image to Cloudinary
         async function uploadImage(file) {
             const formData = new FormData();
