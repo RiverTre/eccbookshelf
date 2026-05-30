@@ -1431,9 +1431,12 @@
                     notes,
                     imageUrl: allImageUrls[0],  // Main image (first one) for backward compatibility
                     imageUrls: allImageUrls,     // All images array
-                    ownerEmail: currentUser.email,
-                    ownerName: currentUser.displayName || currentUser.email.split('@')[0],
                     updatedAt: serverTimestamp()
+                    // NOTE: ownerEmail / ownerName are intentionally NOT set here.
+                    // - New book : assigned in the "Add new book" branch below (creator = owner).
+                    // - Edit book: left out on purpose so updateDoc preserves the ORIGINAL owner.
+                    //   (Previously this overwrote the owner with whoever edited the book,
+                    //    e.g. an admin editing someone else's book stole ownership.)
                 };
                 
                 if (status === 'borrowed' && !editingBook?.borrowedAt) {
@@ -1451,8 +1454,8 @@
                         await addDoc(collection(db, 'history'), {
                             bookId: editingBook.id,
                             bookTitle: title,
-                            ownerEmail: currentUser.email,
-                            ownerName: currentUser.displayName,
+                            ownerEmail: editingBook.ownerEmail,
+                            ownerName: editingBook.ownerName,
                             borrower,
                             action: 'borrowed',
                             timestamp: serverTimestamp()
@@ -1461,8 +1464,8 @@
                         await addDoc(collection(db, 'history'), {
                             bookId: editingBook.id,
                             bookTitle: title,
-                            ownerEmail: currentUser.email,
-                            ownerName: currentUser.displayName,
+                            ownerEmail: editingBook.ownerEmail,
+                            ownerName: editingBook.ownerName,
                             borrower: editingBook.borrower,
                             action: 'returned',
                             timestamp: serverTimestamp()
@@ -1471,7 +1474,9 @@
                     
                     showToast('Book updated 书籍已更新');
                 } else {
-                    // Add new book
+                    // Add new book -- the creator becomes the owner.
+                    bookData.ownerEmail = currentUser.email;
+                    bookData.ownerName = currentUser.displayName || currentUser.email.split('@')[0];
                     bookData.createdAt = serverTimestamp();
                     await addDoc(collection(db, 'books'), bookData);
                     showToast('Book added 书籍已添加');
